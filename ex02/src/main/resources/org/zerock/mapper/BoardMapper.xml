@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.zerock.mapper.BoardMapper"> <!--네임스페스를 통해 BoardMapper의 인터페이스와 함께 매핑되는 것임. -->
+																  <!--select 구절만 무조건 resultType을 설정해줘야한다. 나머지는 resultType을 설정하지 않는다. -->
+																  <!-- 그 이유는 select 같은 경우는 리턴값으로 여러값들(필통)이 될 수도 있고 하나의 값이 될 수도 있기 때문이다. -->
+	<select id= "getList" resultType="org.zerock.domain.BoardVO"> <!-- select id에 값을 대입함으로 인터페이스 BoardMapper의 추상메서드와 연결 가능한 것임.  -->
+		<![CDATA[    
+		select * from tbl_board where bno > 0
+		]]>
+		<!-- CDATA를 쓰는 이유는 select 문에 사용하는 >를 태그를 닫는 > 로 컴퓨터가 오인할 수 있기 때문에 CDATA를 이용하여 미연에 방지하기 위하여 사용한다. -->
+	</select>
+	
+	<select id="getListWithPaging" resultType="org.zerock.domain.BoardVO">
+		
+		<!-- where 절의 쿼리문에는 현재 게시글 갯수만큼의 페이지를 나타내주기 위해 쿼리문변경했 --> 
+		<![CDATA[
+		select rownum, bno, title, content,writer, regdate, replyCnt
+		from (
+				select @rownum:=@rownum+1 as rownum, b.*
+				from (
+					select @rownum:=0
+				) as tmp, tbl_board as b
+				order by bno desc
+		) as boardList 			 
+		where rownum > (#{pageNum} - 1)*#{amount} and rownum <=#{pageNum} *#{amount}
+		]]>
+		
+		<!--   오라클에서 문자열을 이어줄 때에는 ||를 사용한다 -->
+		<!--   mysql에서 문자열을 이어줄 때에는 concat을 사용한다.-->
+		<!-- mysql은 문자열을 이어줄려면 concat을 사용해야한다. -->
+		<!--  
+					MyBatis의 동적 SQL -> 
+						  if, 
+					choos(when, otherwise) 
+				-    when    ->    esle if 
+				-  otherwise ->     else
+		--> 
+		<!--choose는 xml에서 if문과 동일 else if 는 when과 동일 -->
+		<choose>
+<!--  type은 String타입이며 jsp에서 받는 'T'는 char타입이기 때문에 toString()으로 String타입으로 변환 시켜준다. -->
+			<when test="type=='T'.toString()">
+				and title like concat('%',#{keyword},'%')
+			</when>	
+			<when test="type=='C'.toString()">	
+				and content like concat('%',#{keyword},'%')
+			</when>
+			<when test="type=='W'.toString()">
+				and writer like concat('%',#{keyword},'%')
+			</when>
+			<when test="type=='TC'.toString()">
+				and title like concat('%',#{keyword},'%')
+				or content like concat('%',#{keyword},'%')
+			</when>
+			
+			<when test="type=='TW'.toString()">
+				and title like concat('%',#{keyword},'%')
+				or writer like concat('%',#{keyword},'%')
+			</when>
+			
+			<when test="type=='TWC'.toString()">
+				and title like concat('%',#{keyword},'%')
+				or writer like concat('%',#{keyword},'%')
+				or content like concat('%',#{keyword},'%')
+			</when>
+		</choose>
+	</select>
+<!-- 게시글의 갯수만큼에 따른 페이징을 보여주기 위해 작성한  -->	
+	<select id="getTotalCount" resultType="int">
+		select count(*) from tbl_board
+		<choose>
+<!--  type은 String타입이며 jsp에서 받는 'T'는 char타입이기 때문에 toString()으로 String타입으로 변환 시켜준다. -->
+			<when test="type=='T'.toString()">
+				where title like concat('%',#{keyword},'%')
+			</when>	
+			<when test="type=='C'.toString()">	
+				where content like concat('%',#{keyword},'%')
+			</when>
+			<when test="type=='W'.toString()">
+				where writer like concat('%',#{keyword},'%')
+			</when>
+			<when test="type=='TC'.toString()">
+				where title like concat('%',#{keyword},'%')
+				or content like concat('%',#{keyword},'%')
+			</when>
+			
+			<when test="type=='TW'.toString()">
+				where title like concat('%',#{keyword},'%')
+				or writer like concat('%',#{keyword},'%')
+			</when>
+			
+			<when test="type=='TWC'.toString()">
+				where title like concat('%',#{keyword},'%')
+				or writer like concat('%',#{keyword},'%')
+				or content like concat('%',#{keyword},'%')
+			</when>
+		</choose>
+		
+	</select>
+		
+		
+		
+		
+	<insert id= "insert">
+		insert into tbl_board (title,content,writer)
+	    values (#{title},#{content},#{writer})
+	</insert>
+		
+	<insert id ="insertSelectKey">
+		<!-- 
+			selectKey는 MYBatisd의 어노테이션인가? -> !! xml태그로 어노테이션을 적용할 수 있는지 여쭤보기 !!
+			keyProperty를 이용하여 BoardV클래스에 있는 bno변수(Mysql에서 컬럼 bno의 데이터를 저장하는 변수)에 
+		 -->
+		<selectKey keyProperty = "bno" order ="BEFORE" resultType="int">
+		<!-- 					  컬럼	   해당 쿼리의 순서	 	 		 -->
+		<!-- 
+			해당 쿼리의 순서 
+		   1) order = BEFORE -> insert쿼리문 수행 전에 selectKey를 실행한다.
+		   2) order = AFTER	 -> insert쿼리문 수행 후에 selectKey를 실행한다.
+	
+		-->							
+			select max(bno)+1 bno from tbl_board
+			
+		<!--  !! select max(bno)+1을 해줌으로써 찾은 row? colom?에 insert 하는 것인지 여쭤보기 !!  -->
+			
+		</selectKey>
+			
+		insert into tbl_board (bno,title,content,writer)
+		values (#{bno},#{title},#{content},#{writer})
+	</insert>
+	
+	<select id="read" resultType="org.zerock.domain.BoardVO"> <!-- insert구문만 result type을 가질수 있는데 얘는 왜 result type을 가지고 있는걸까?  -->
+		select * from tbl_board where bno = #{bno}
+	</select>
+	
+	<delete id="delete">
+		delete from tbl_board where bno= #{bno}
+	</delete>
+	
+	<update id = "update">
+		update tbl_board
+		set title = #{title},
+			content = #{content},
+			updatedate = now()
+		    
+		where bno = #{bno}
+	</update>
+	
+	<update id = "updateReplyCnt">
+	update tbl_board
+	set replycnt = replycnt + #{amount}
+	where bno = #{bno}
+	
+	</update>
+	
+	
+</mapper>
